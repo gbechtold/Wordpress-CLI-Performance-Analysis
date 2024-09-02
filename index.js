@@ -86,7 +86,7 @@ async function testPerformance(pages) {
       const lighthouseResult = await runLighthouse(page);
       const performanceScore = lighthouseResult.categories.performance.score * 100;
       results[page] = performanceScore;
-      saturnSays(`Performance score for ${page}: ${performanceScore.toFixed(2)}% 📊`);
+      saturnSays(`Performance score for ${page}: ${performanceScore.toFixed(2)} points 📊`);
     } catch (error) {
       console.error(`Error testing ${page}:`, error);
       results[page] = 'Error';
@@ -104,6 +104,8 @@ function comparePerformance(baseline, current) {
       comparison[page] = {
         diff: diff.toFixed(2),
         faster: diff > 0,
+        baseline: baseline[page].toFixed(2),
+        current: current[page].toFixed(2),
       };
     } else {
       comparison[page] = 'Error';
@@ -196,7 +198,10 @@ async function main(resume = false) {
         console.log('\nPerformance Comparison:');
         for (const [page, comparison] of Object.entries(performanceComparison)) {
           if (comparison !== 'Error') {
-            console.log(`${page}: ${comparison.diff}% ${comparison.faster ? 'faster ⚡' : 'slower 🐢'}`);
+            console.log(`${page}:`);
+            console.log(`  Baseline: ${comparison.baseline} points`);
+            console.log(`  Current: ${comparison.current} points`);
+            console.log(`  Difference: ${comparison.diff} points (${comparison.faster ? 'faster ⚡' : 'slower 🐢'})`);
           } else {
             console.log(`${page}: Error occurred during testing`);
           }
@@ -235,7 +240,10 @@ async function main(resume = false) {
       console.log(`\n${plugin}:`);
       for (const [page, comparison] of Object.entries(impact)) {
         if (comparison !== 'Error') {
-          console.log(`  ${page}: ${comparison.diff}% ${comparison.faster ? 'faster ⚡' : 'slower 🐢'}`);
+          console.log(`  ${page}:`);
+          console.log(`    Baseline: ${comparison.baseline} points`);
+          console.log(`    Without plugin: ${comparison.current} points`);
+          console.log(`    Impact: ${comparison.diff} points (${comparison.faster ? 'faster ⚡' : 'slower 🐢'})`);
         } else {
           console.log(`  ${page}: Error occurred during testing`);
         }
@@ -244,7 +252,7 @@ async function main(resume = false) {
         (sum, comparison) => sum + (comparison !== 'Error' ? parseFloat(comparison.diff) : 0),
         0
       );
-      console.log(`  Overall impact: ${overallImpact.toFixed(2)}%`);
+      console.log(`  Overall impact: ${overallImpact.toFixed(2)} points`);
     }
 
     saturnSays("That's all, folks! Hope this information helps you optimize your WordPress site! 🚀🌟");
