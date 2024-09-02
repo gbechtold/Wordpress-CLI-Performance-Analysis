@@ -84,9 +84,23 @@ async function testPerformance(pages) {
     saturnSays(`Testing performance for: ${page} 🧪`);
     try {
       const lighthouseResult = await runLighthouse(page);
-      const performanceScore = lighthouseResult.categories.performance.score * 100;
-      results[page] = performanceScore;
-      saturnSays(`Performance score for ${page}: ${performanceScore.toFixed(2)} points 📊`);
+      const performanceScore = Math.round(lighthouseResult.categories.performance.score * 100);
+      const audits = lighthouseResult.audits;
+
+      results[page] = {
+        score: performanceScore,
+        metrics: {
+          FCP: audits['first-contentful-paint'].numericValue,
+          LCP: audits['largest-contentful-paint'].numericValue,
+          TBT: audits['total-blocking-time'].numericValue,
+          CLS: audits['cumulative-layout-shift'].numericValue,
+          SI: audits['speed-index'].numericValue,
+          TTI: audits['interactive'].numericValue,
+        },
+        timings: lighthouseResult.timing,
+      };
+
+      saturnSays(`Performance score for ${page}: ${performanceScore} points 📊`);
     } catch (error) {
       console.error(`Error testing ${page}:`, error);
       results[page] = 'Error';
@@ -100,12 +114,27 @@ function comparePerformance(baseline, current) {
   const comparison = {};
   for (const page in baseline) {
     if (baseline[page] !== 'Error' && current[page] !== 'Error') {
-      const diff = current[page] - baseline[page];
+      const scoreDiff = current[page].score - baseline[page].score;
+      const metricsDiff = {};
+      const timingsDiff = {};
+
+      for (const metric in baseline[page].metrics) {
+        metricsDiff[metric] = current[page].metrics[metric] - baseline[page].metrics[metric];
+      }
+
+      for (const timing in baseline[page].timings) {
+        timingsDiff[timing] = current[page].timings[timing] - baseline[page].timings[timing];
+      }
+
       comparison[page] = {
-        diff: diff.toFixed(2),
-        faster: diff > 0,
-        baseline: baseline[page].toFixed(2),
-        current: current[page].toFixed(2),
+        score: {
+          diff: scoreDiff,
+          faster: scoreDiff > 0,
+          baseline: baseline[page].score,
+          current: current[page].score,
+        },
+        metrics: metricsDiff,
+        timings: timingsDiff,
       };
     } else {
       comparison[page] = 'Error';
@@ -138,9 +167,35 @@ function loadProgress() {
   return false;
 }
 
+function printPerformanceComparison(comparison) {
+  for (const [page, data] of Object.entries(comparison)) {
+    if (data !== 'Error') {
+      console.log(`${page}:`);
+      console.log(`  Score:`);
+      console.log(`    Baseline: ${data.score.baseline} points`);
+      console.log(`    Current: ${data.score.current} points`);
+      console.log(
+        `    Difference: ${data.score.diff.toFixed(2)} points (${data.score.faster ? 'faster ⚡' : 'slower 🐢'})`
+      );
+
+      console.log(`  Metrics:`);
+      for (const [metric, diff] of Object.entries(data.metrics)) {
+        console.log(`    ${metric}: ${diff.toFixed(2)}ms (${diff < 0 ? 'faster ⚡' : 'slower 🐢'})`);
+      }
+
+      console.log(`  Timings:`);
+      for (const [timing, diff] of Object.entries(data.timings)) {
+        console.log(`    ${timing}: ${diff}ms (${diff < 0 ? 'faster ⚡' : 'slower 🐢'})`);
+      }
+    } else {
+      console.log(`${page}: Error occurred during testing`);
+    }
+  }
+}
+
 async function main(resume = false) {
   try {
-    saturnSays("Welcome to the WordPress Plugin Performance Test v1.0! Let's get started! 🚀");
+    saturnSays("Welcome to the WordPress Plugin Performance Test v2.0! Let's get started! 🚀");
 
     if (resume && loadProgress()) {
       saturnSays('Resuming from previous session...');
@@ -196,16 +251,7 @@ async function main(resume = false) {
         performanceImpact[plugin.name] = performanceComparison;
 
         console.log('\nPerformance Comparison:');
-        for (const [page, comparison] of Object.entries(performanceComparison)) {
-          if (comparison !== 'Error') {
-            console.log(`${page}:`);
-            console.log(`  Baseline: ${comparison.baseline} points`);
-            console.log(`  Current: ${comparison.current} points`);
-            console.log(`  Difference: ${comparison.diff} points (${comparison.faster ? 'faster ⚡' : 'slower 🐢'})`);
-          } else {
-            console.log(`${page}: Error occurred during testing`);
-          }
-        }
+        printPerformanceComparison(performanceComparison);
 
         saturnSays(`Reactivating ${plugin.name}... 🔼`);
         await runWpCliCommand(`plugin activate ${plugin.name}`);
@@ -225,11 +271,11 @@ async function main(resume = false) {
     saturnSays("Now, let's sort the results and see which plugins have the biggest impact... 📊");
     const sortedImpact = Object.entries(performanceImpact).sort((a, b) => {
       const sumA = Object.values(a[1]).reduce(
-        (sum, comparison) => sum + (comparison !== 'Error' ? parseFloat(comparison.diff) : 0),
+        (sum, comparison) => sum + (comparison !== 'Error' ? comparison.score.diff : 0),
         0
       );
       const sumB = Object.values(b[1]).reduce(
-        (sum, comparison) => sum + (comparison !== 'Error' ? parseFloat(comparison.diff) : 0),
+        (sum, comparison) => sum + (comparison !== 'Error' ? comparison.score.diff : 0),
         0
       );
       return sumB - sumA;
@@ -238,18 +284,9 @@ async function main(resume = false) {
     saturnSays("Here's the performance impact of each plugin:");
     for (const [plugin, impact] of sortedImpact) {
       console.log(`\n${plugin}:`);
-      for (const [page, comparison] of Object.entries(impact)) {
-        if (comparison !== 'Error') {
-          console.log(`  ${page}:`);
-          console.log(`    Baseline: ${comparison.baseline} points`);
-          console.log(`    Without plugin: ${comparison.current} points`);
-          console.log(`    Impact: ${comparison.diff} points (${comparison.faster ? 'faster ⚡' : 'slower 🐢'})`);
-        } else {
-          console.log(`  ${page}: Error occurred during testing`);
-        }
-      }
+      printPerformanceComparison(impact);
       const overallImpact = Object.values(impact).reduce(
-        (sum, comparison) => sum + (comparison !== 'Error' ? parseFloat(comparison.diff) : 0),
+        (sum, comparison) => sum + (comparison !== 'Error' ? comparison.score.diff : 0),
         0
       );
       console.log(`  Overall impact: ${overallImpact.toFixed(2)} points`);
