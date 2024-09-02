@@ -1,0 +1,15 @@
+{
+  "name": "wp-plugin-performance-test",
+  "version": "1.0.0",
+  "description": "Test WordPress plugin performance impact",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "dotenv": "^10.0.0",
+    "node-ssh": "^12.0.0",
+    "lighthouse": "^9.0.0",
+    "chrome-launcher": "^0.15.0"
+  }
+}
