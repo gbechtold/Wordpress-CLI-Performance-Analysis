@@ -1,35 +1,41 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
+# Node modules
+node_modules/
 
-# Virtual Environment
-venv/
-env/
+# Environment variables
 .env
 
-# IDE files
-.vscode/
-.idea/
+# macOS system files
+.DS_Store
 
 # Logs
 *.log
 
-# Lighthouse output
-*.report.html
-*.report.json
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
 
-# OS generated files
-.DS_Store
-Thumbs.db
+# Coverage directory used by tools like istanbul
+coverage
 
-# WordPress specific
-wp-config.php
-wp-content/advanced-cache.php
-wp-content/backup-db/
-wp-content/backups/
-wp-content/blogs.dir/
-wp-content/cache/
-wp-content/upgrade/
-wp-content/uploads/
-wp-content/wp-cache-config.php
+# npm cache directory
+.npm
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# Progress file
+progress.json

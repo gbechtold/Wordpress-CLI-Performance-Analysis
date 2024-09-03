@@ -4,6 +4,7 @@ const lighthouse = require('lighthouse');
 const chromeLauncher = require('chrome-launcher');
 const fs = require('fs');
 const readline = require('readline');
+const axios = require('axios');
 
 const ssh = new NodeSSH();
 
@@ -11,6 +12,10 @@ const SERVER_HOST = process.env.SERVER_HOST;
 const SERVER_USER = process.env.SERVER_USER;
 const SERVER_PASSWORD = process.env.SERVER_PASSWORD;
 const WP_PATH = process.env.WP_PATH;
+const LLM_API_KEY = process.env.LLM_API_KEY;
+const LLM_API_ENDPOINT = process.env.LLM_API_ENDPOINT;
+const MAX_TOKENS = parseInt(process.env.MAX_TOKENS, 10);
+const TEMPERATURE = parseFloat(process.env.TEMPERATURE);
 
 const PAGES_TO_TEST = [process.env.HOMEPAGE_URL, process.env.PRODUCT_PAGE_URL, process.env.CART_PAGE_URL];
 
@@ -19,6 +24,7 @@ let plugins = [];
 let baselinePerformance = {};
 let performanceImpact = {};
 let currentIteration = 0;
+let startTime;
 
 function saturnSays(message) {
   console.log(`🪐 Saturn Engine: ${message}`);
@@ -84,23 +90,9 @@ async function testPerformance(pages) {
     saturnSays(`Testing performance for: ${page} 🧪`);
     try {
       const lighthouseResult = await runLighthouse(page);
-      const performanceScore = Math.round(lighthouseResult.categories.performance.score * 100);
-      const audits = lighthouseResult.audits;
-
-      results[page] = {
-        score: performanceScore,
-        metrics: {
-          FCP: audits['first-contentful-paint'].numericValue,
-          LCP: audits['largest-contentful-paint'].numericValue,
-          TBT: audits['total-blocking-time'].numericValue,
-          CLS: audits['cumulative-layout-shift'].numericValue,
-          SI: audits['speed-index'].numericValue,
-          TTI: audits['interactive'].numericValue,
-        },
-        timings: lighthouseResult.timing,
-      };
-
-      saturnSays(`Performance score for ${page}: ${performanceScore} points 📊`);
+      const performanceScore = lighthouseResult.categories.performance.score * 100;
+      results[page] = performanceScore;
+      saturnSays(`Performance score for ${page}: ${performanceScore.toFixed(2)} points 📊`);
     } catch (error) {
       console.error(`Error testing ${page}:`, error);
       results[page] = 'Error';
@@ -114,27 +106,12 @@ function comparePerformance(baseline, current) {
   const comparison = {};
   for (const page in baseline) {
     if (baseline[page] !== 'Error' && current[page] !== 'Error') {
-      const scoreDiff = current[page].score - baseline[page].score;
-      const metricsDiff = {};
-      const timingsDiff = {};
-
-      for (const metric in baseline[page].metrics) {
-        metricsDiff[metric] = current[page].metrics[metric] - baseline[page].metrics[metric];
-      }
-
-      for (const timing in baseline[page].timings) {
-        timingsDiff[timing] = current[page].timings[timing] - baseline[page].timings[timing];
-      }
-
+      const diff = current[page] - baseline[page];
       comparison[page] = {
-        score: {
-          diff: scoreDiff,
-          faster: scoreDiff > 0,
-          baseline: baseline[page].score,
-          current: current[page].score,
-        },
-        metrics: metricsDiff,
-        timings: timingsDiff,
+        diff: diff.toFixed(2),
+        faster: diff > 0,
+        baseline: baseline[page].toFixed(2),
+        current: current[page].toFixed(2),
       };
     } else {
       comparison[page] = 'Error';
@@ -167,35 +144,52 @@ function loadProgress() {
   return false;
 }
 
-function printPerformanceComparison(comparison) {
-  for (const [page, data] of Object.entries(comparison)) {
-    if (data !== 'Error') {
-      console.log(`${page}:`);
-      console.log(`  Score:`);
-      console.log(`    Baseline: ${data.score.baseline} points`);
-      console.log(`    Current: ${data.score.current} points`);
-      console.log(
-        `    Difference: ${data.score.diff.toFixed(2)} points (${data.score.faster ? 'faster ⚡' : 'slower 🐢'})`
-      );
+function calculateProgress(current, total) {
+  const percentage = (current / total) * 100;
+  return percentage.toFixed(2);
+}
 
-      console.log(`  Metrics:`);
-      for (const [metric, diff] of Object.entries(data.metrics)) {
-        console.log(`    ${metric}: ${diff.toFixed(2)}ms (${diff < 0 ? 'faster ⚡' : 'slower 🐢'})`);
-      }
+function estimateRemainingTime(elapsed, current, total) {
+  const remainingIterations = total - current;
+  const averageTimePerIteration = elapsed / current;
+  const remainingTimeSeconds = remainingIterations * averageTimePerIteration;
+  const hours = Math.floor(remainingTimeSeconds / 3600);
+  const minutes = Math.floor((remainingTimeSeconds % 3600) / 60);
+  return `${hours}h ${minutes}m`;
+}
 
-      console.log(`  Timings:`);
-      for (const [timing, diff] of Object.entries(data.timings)) {
-        console.log(`    ${timing}: ${diff}ms (${diff < 0 ? 'faster ⚡' : 'slower 🐢'})`);
+async function analyzeFinalOutput(performanceImpact) {
+  const prompt = `Analyze the following performance impact data for WordPress plugins and provide a prioritized list of plugins to consider deactivating for best performance improvement. Include brief explanations for each recommendation:
+
+${JSON.stringify(performanceImpact, null, 2)}`;
+
+  try {
+    const response = await axios.post(
+      LLM_API_ENDPOINT,
+      {
+        prompt,
+        max_tokens: MAX_TOKENS,
+        temperature: TEMPERATURE,
+        model: 'claude-2.0',
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': LLM_API_KEY,
+        },
       }
-    } else {
-      console.log(`${page}: Error occurred during testing`);
-    }
+    );
+
+    return response.data.choices[0].text.trim();
+  } catch (error) {
+    console.error('Error calling LLM API:', error);
+    return 'Unable to generate recommendations due to an error.';
   }
 }
 
 async function main(resume = false) {
   try {
-    saturnSays("Welcome to the WordPress Plugin Performance Test v2.0! Let's get started! 🚀");
+    saturnSays("Welcome to the WordPress Plugin Performance Testing v1.0! Let's get started! 🚀");
 
     if (resume && loadProgress()) {
       saturnSays('Resuming from previous session...');
@@ -221,6 +215,8 @@ async function main(resume = false) {
       }
     });
 
+    startTime = Date.now();
+
     for (let i = currentIteration; i < plugins.length; i++) {
       if (shouldStop) {
         saturnSays("Stopping as requested. Here's what we've got so far:");
@@ -232,6 +228,13 @@ async function main(resume = false) {
         console.log('\n' + '='.repeat(50));
         console.log(`ITERATION ${i + 1}: Testing plugin ${plugin.name}`);
         console.log('='.repeat(50) + '\n');
+
+        const progress = calculateProgress(i + 1, plugins.length);
+        const elapsedTime = (Date.now() - startTime) / 1000; // in seconds
+        const estimatedTimeRemaining = estimateRemainingTime(elapsedTime, i + 1, plugins.length);
+
+        saturnSays(`Progress: ${progress}% complete`);
+        saturnSays(`Estimated time remaining: ${estimatedTimeRemaining}`);
 
         saturnSays(`Now testing plugin: ${plugin.name} 🔌`);
         printPlugins(plugins);
@@ -251,7 +254,16 @@ async function main(resume = false) {
         performanceImpact[plugin.name] = performanceComparison;
 
         console.log('\nPerformance Comparison:');
-        printPerformanceComparison(performanceComparison);
+        for (const [page, comparison] of Object.entries(performanceComparison)) {
+          if (comparison !== 'Error') {
+            console.log(`${page}:`);
+            console.log(`  Baseline: ${comparison.baseline} points`);
+            console.log(`  Current: ${comparison.current} points`);
+            console.log(`  Difference: ${comparison.diff} points (${comparison.faster ? 'faster ⚡' : 'slower 🐢'})`);
+          } else {
+            console.log(`${page}: Error occurred during testing`);
+          }
+        }
 
         saturnSays(`Reactivating ${plugin.name}... 🔼`);
         await runWpCliCommand(`plugin activate ${plugin.name}`);
@@ -271,11 +283,11 @@ async function main(resume = false) {
     saturnSays("Now, let's sort the results and see which plugins have the biggest impact... 📊");
     const sortedImpact = Object.entries(performanceImpact).sort((a, b) => {
       const sumA = Object.values(a[1]).reduce(
-        (sum, comparison) => sum + (comparison !== 'Error' ? comparison.score.diff : 0),
+        (sum, comparison) => sum + (comparison !== 'Error' ? parseFloat(comparison.diff) : 0),
         0
       );
       const sumB = Object.values(b[1]).reduce(
-        (sum, comparison) => sum + (comparison !== 'Error' ? comparison.score.diff : 0),
+        (sum, comparison) => sum + (comparison !== 'Error' ? parseFloat(comparison.diff) : 0),
         0
       );
       return sumB - sumA;
@@ -284,13 +296,27 @@ async function main(resume = false) {
     saturnSays("Here's the performance impact of each plugin:");
     for (const [plugin, impact] of sortedImpact) {
       console.log(`\n${plugin}:`);
-      printPerformanceComparison(impact);
+      for (const [page, comparison] of Object.entries(impact)) {
+        if (comparison !== 'Error') {
+          console.log(`  ${page}:`);
+          console.log(`    Baseline: ${comparison.baseline} points`);
+          console.log(`    Without plugin: ${comparison.current} points`);
+          console.log(`    Impact: ${comparison.diff} points (${comparison.faster ? 'faster ⚡' : 'slower 🐢'})`);
+        } else {
+          console.log(`  ${page}: Error occurred during testing`);
+        }
+      }
       const overallImpact = Object.values(impact).reduce(
-        (sum, comparison) => sum + (comparison !== 'Error' ? comparison.score.diff : 0),
+        (sum, comparison) => sum + (comparison !== 'Error' ? parseFloat(comparison.diff) : 0),
         0
       );
       console.log(`  Overall impact: ${overallImpact.toFixed(2)} points`);
     }
+
+    saturnSays('Analyzing results with our AI assistant... 🤖');
+    const aiRecommendations = await analyzeFinalOutput(performanceImpact);
+    console.log('\nAI Recommendations:');
+    console.log(aiRecommendations);
 
     saturnSays("That's all, folks! Hope this information helps you optimize your WordPress site! 🚀🌟");
   } catch (error) {

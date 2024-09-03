@@ -1,4 +1,4 @@
-# WordPress Plugin Performance Test v1.0
+# WordPress Plugin Performance Testing v1.0
 
 This project provides a tool to test the performance impact of WordPress plugins on your server. It automates the process of activating and deactivating plugins while measuring page load times using Google Lighthouse.
 
@@ -17,6 +17,8 @@ This project provides a tool to test the performance impact of WordPress plugins
 - Lists currently activated plugins for each test
 - Allows graceful stopping of the process with preliminary output
 - Supports full restart and resume functionality
+- Displays progress status and estimated remaining time
+- Provides AI-powered analysis and recommendations for plugin optimization
 
 ## Prerequisites
 
@@ -28,8 +30,8 @@ This project provides a tool to test the performance impact of WordPress plugins
 1. Clone this repository:
 
    ```
-   git clone https://github.com/your-username/wp-plugin-performance-test.git
-   cd wp-plugin-performance-test
+   git clone https://github.com/your-username/wp-plugin-performance-testing.git
+   cd wp-plugin-performance-testing
    ```
 
 2. Run the setup script:
@@ -48,14 +50,14 @@ This project provides a tool to test the performance impact of WordPress plugins
    - Create a .env file from .env-example (if it doesn't exist)
 
 3. Configure your environment:
-   Edit the `.env` file with your specific WordPress server details:
+   Edit the `.env` file with your specific WordPress server details and AI API credentials:
    ```
    nano .env
    ```
 
 ## Usage
 
-1. Ensure your `.env` file is correctly configured with your WordPress server details and test URLs.
+1. Ensure your `.env` file is correctly configured with your WordPress server details, test URLs, and AI API credentials.
 
 2. Run the performance test:
 
@@ -73,7 +75,9 @@ This project provides a tool to test the performance impact of WordPress plugins
    npm start -- --resume
    ```
 
-6. At the end of the test, the script will output the performance impact of each plugin, sorted by overall impact.
+6. During the test, you'll see progress updates and estimated remaining time after each iteration.
+
+7. At the end of the test, the script will output the performance impact of each plugin, sorted by overall impact, and provide AI-generated recommendations for optimization.
 
 ## Interpreting Results
 
@@ -91,13 +95,15 @@ plugin-name:
 
 In this example, the plugin improved overall performance by 4.45%, with varied impact on different pages.
 
+The AI-generated recommendations will provide insights on which plugins to consider deactivating for the best performance improvement, along with brief explanations for each recommendation.
+
 ## Troubleshooting
 
 If you encounter any issues during setup or execution:
 
 1. Ensure you're running the script on macOS, as the setup relies on Homebrew.
 2. Make sure you have the latest version of the code and have run the setup script.
-3. Check that your `.env` file is correctly configured with valid WordPress server details.
+3. Check that your `.env` file is correctly configured with valid WordPress server details and AI API credentials.
 4. Ensure your WordPress server has WP-CLI installed and is accessible via SSH.
 5. If you encounter a "ECONNREFUSED" error related to Chrome:
    - Make sure Google Chrome is installed on your system.
